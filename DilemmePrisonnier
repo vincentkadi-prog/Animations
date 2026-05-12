@@ -1,0 +1,882 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dilemme du Prisonnier</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg: #0c0c10;
+  --surface: #14141c;
+  --surface2: #1c1c28;
+  --border: #28283a;
+  --gold: #f0c040;
+  --red: #e05555;
+  --green: #50c080;
+  --blue: #5588dd;
+  --purple: #9966cc;
+  --text: #dde0e8;
+  --muted: #6a6a82;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Courier New', monospace;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 28px 16px 48px;
+}
+
+/* ── Header ── */
+.header {
+  text-align: center;
+  margin-bottom: 28px;
+}
+
+h1 {
+  font-size: clamp(22px, 5vw, 40px);
+  font-weight: normal;
+  letter-spacing: 10px;
+  text-transform: uppercase;
+  color: var(--gold);
+  text-shadow: 0 0 24px rgba(240,192,64,.35);
+}
+
+.subtitle {
+  font-size: 11px;
+  letter-spacing: 4px;
+  color: var(--muted);
+  margin-top: 6px;
+  text-transform: uppercase;
+}
+
+/* ── Layout ── */
+.game {
+  width: 100%;
+  max-width: 820px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* ── Config bar ── */
+.config-bar {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  border-radius: 3px;
+}
+
+.config-bar label {
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: var(--muted);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+select {
+  background: var(--bg);
+  color: var(--gold);
+  border: 1px solid var(--gold);
+  padding: 6px 10px;
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  outline: none;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.strat-desc {
+  font-size: 11px;
+  color: var(--muted);
+  font-style: italic;
+  flex: 1;
+  min-width: 0;
+}
+
+.round-badge {
+  margin-left: auto;
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* ── Arena ── */
+.arena {
+  display: grid;
+  grid-template-columns: 1fr 150px 1fr;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+  min-height: 270px;
+}
+
+.prisoner {
+  padding: 22px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  transition: background .4s;
+}
+
+.prisoner.cooperated { background: rgba(80,192,128,.07); }
+.prisoner.betrayed   { background: rgba(224,85,85,.07); }
+
+.p-name {
+  font-size: 10px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Prisoner figure */
+.figure {
+  position: relative;
+  width: 72px;
+  height: 96px;
+}
+
+.figure svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.bars-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  gap: 9px;
+  padding: 0 6px;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.bar {
+  flex: 1;
+  background: linear-gradient(180deg, #3a3a50 0%, #2a2a3a 100%);
+  border-radius: 2px;
+  box-shadow: inset 1px 0 rgba(255,255,255,.08);
+  transition: opacity .6s, transform .6s;
+}
+
+.prisoner.free .bar {
+  opacity: 0;
+  transform: translateY(-16px);
+}
+
+/* Choice bubble */
+.bubble {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  opacity: 0;
+  transition: opacity .3s;
+}
+
+.bubble.show { opacity: 1; }
+.bubble.coop { border-color: var(--green); background: rgba(80,192,128,.12); }
+.bubble.defect { border-color: var(--red); background: rgba(224,85,85,.12); }
+
+@keyframes pop {
+  0%   { transform: scale(0) rotate(-180deg); opacity: 0; }
+  65%  { transform: scale(1.25) rotate(8deg); }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+
+.bubble.pop { animation: pop .45s ease forwards; }
+
+/* Score */
+.p-score { text-align: center; }
+.score-num { font-size: 30px; font-weight: bold; line-height: 1; }
+.score-lbl { font-size: 9px; letter-spacing: 2px; color: var(--muted); margin-top: 3px; }
+
+/* ── Outcome column ── */
+.outcome {
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 16px 10px;
+  text-align: center;
+}
+
+.outcome-lbl {
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.outcome-body {
+  min-height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.verdict-tag {
+  font-size: 9px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  padding: 4px 8px;
+  border-radius: 2px;
+  border: 1px solid transparent;
+  opacity: 0;
+  transition: opacity .4s;
+}
+
+.verdict-tag.show { opacity: 1; }
+.vtag-cc { border-color: var(--green); color: var(--green); background: rgba(80,192,128,.12); }
+.vtag-dd { border-color: var(--red);   color: var(--red);   background: rgba(224,85,85,.12); }
+.vtag-dc { border-color: var(--gold);  color: var(--gold);  background: rgba(240,192,64,.12); }
+.vtag-cd { border-color: var(--blue);  color: var(--blue);  background: rgba(85,136,221,.12); }
+
+/* ── Actions ── */
+.actions {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 16px;
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  border-radius: 3px;
+}
+
+.btn {
+  padding: 12px 30px;
+  font-family: inherit;
+  font-size: 12px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  cursor: pointer;
+  border: 1px solid;
+  background: transparent;
+  border-radius: 2px;
+  transition: all .2s;
+  font-weight: bold;
+}
+
+.btn:disabled { opacity: .25; cursor: not-allowed; }
+
+.btn-c { border-color: var(--green); color: var(--green); }
+.btn-c:hover:not(:disabled) { background: rgba(80,192,128,.14); box-shadow: 0 0 14px rgba(80,192,128,.25); }
+
+.btn-d { border-color: var(--red); color: var(--red); }
+.btn-d:hover:not(:disabled) { background: rgba(224,85,85,.14); box-shadow: 0 0 14px rgba(224,85,85,.25); }
+
+.btn-r { border-color: var(--gold); color: var(--gold); display: none; }
+.btn-r:hover { background: rgba(240,192,64,.14); }
+
+/* ── History ── */
+.history {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-height: 52px;
+  border-radius: 3px;
+}
+
+.history-lbl {
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: var(--muted);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.chip {
+  width: 28px;
+  height: 28px;
+  border-radius: 3px;
+  border: 1px solid;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: bold;
+  cursor: default;
+  position: relative;
+}
+
+.chip:hover::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: 36px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--surface2);
+  color: var(--text);
+  font-size: 10px;
+  padding: 5px 9px;
+  white-space: nowrap;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  z-index: 20;
+  pointer-events: none;
+}
+
+.chip-CC { border-color: var(--green); color: var(--green); background: rgba(80,192,128,.1); }
+.chip-DD { border-color: var(--red);   color: var(--red);   background: rgba(224,85,85,.1); }
+.chip-DC { border-color: var(--gold);  color: var(--gold);  background: rgba(240,192,64,.1); }
+.chip-CD { border-color: var(--blue);  color: var(--blue);  background: rgba(85,136,221,.1); }
+
+/* ── Gameover ── */
+.gameover {
+  display: none;
+  background: var(--surface);
+  border: 1px solid var(--gold);
+  padding: 24px;
+  text-align: center;
+  border-radius: 3px;
+}
+
+.gameover.show { display: block; }
+
+.go-title {
+  font-size: 22px;
+  letter-spacing: 6px;
+  color: var(--gold);
+  margin-bottom: 14px;
+}
+
+.go-body {
+  font-size: 13px;
+  line-height: 2;
+  color: var(--muted);
+}
+
+/* ── Matrix ── */
+.matrix-wrap {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 18px;
+  border-radius: 3px;
+}
+
+.matrix-title {
+  font-size: 10px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 14px;
+}
+
+.matrix {
+  display: grid;
+  grid-template-columns: 110px 1fr 1fr;
+  gap: 4px;
+  font-size: 11px;
+}
+
+.mh {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 1px;
+  padding: 8px;
+  text-align: center;
+  line-height: 1.5;
+}
+
+.mh.right { justify-content: flex-end; text-align: right; }
+
+.mc {
+  padding: 10px 8px;
+  border-radius: 2px;
+  text-align: center;
+  border: 1px solid transparent;
+  transition: transform .3s, box-shadow .3s;
+}
+
+.mc-cc { background: rgba(80,192,128,.09);  border-color: rgba(80,192,128,.25); }
+.mc-cd { background: rgba(85,136,221,.09);  border-color: rgba(85,136,221,.25); }
+.mc-dc { background: rgba(240,192,64,.09);  border-color: rgba(240,192,64,.25); }
+.mc-dd { background: rgba(224,85,85,.09);   border-color: rgba(224,85,85,.25); }
+
+.mc.hl { transform: scale(1.04); box-shadow: 0 0 12px rgba(255,255,255,.08); }
+
+.mc-score { font-size: 16px; font-weight: bold; }
+.mc-desc  { font-size: 9px; color: var(--muted); margin-top: 4px; line-height: 1.5; }
+
+.matrix-note {
+  font-size: 10px;
+  color: var(--muted);
+  margin-top: 12px;
+  line-height: 1.7;
+}
+
+/* ── Strategies legend ── */
+.legend {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 14px 18px;
+  border-radius: 3px;
+}
+
+.legend-title {
+  font-size: 10px;
+  letter-spacing: 3px;
+  color: var(--muted);
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+
+.legend-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 8px;
+}
+
+.legend-item {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.legend-item strong {
+  color: var(--text);
+}
+
+/* shake */
+@keyframes shake {
+  0%,100% { transform: translateX(0); }
+  25% { transform: translateX(-5px); }
+  75% { transform: translateX(5px); }
+}
+
+.prisoner.shake { animation: shake .3s ease; }
+
+/* responsive */
+@media (max-width: 560px) {
+  .arena { grid-template-columns: 1fr 110px 1fr; }
+  .btn { padding: 10px 18px; font-size: 10px; letter-spacing: 2px; }
+  .score-num { font-size: 24px; }
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Dilemme du Prisonnier</h1>
+  <p class="subtitle">simulation interactive — théorie des jeux</p>
+</div>
+
+<div class="game">
+
+  <!-- Config -->
+  <div class="config-bar">
+    <label>Stratégie :</label>
+    <select id="sel" onchange="onStrategyChange()">
+      <option value="tft">Donnant-Donnant (TFT)</option>
+      <option value="angelique">Angélique</option>
+      <option value="diabolique">Diabolique</option>
+      <option value="rancunier">Rancunier</option>
+      <option value="pavlov">Pavlov</option>
+      <option value="aleatoire">Aléatoire</option>
+    </select>
+    <span class="strat-desc" id="sdesc"></span>
+    <span class="round-badge" id="rbadge">Manche 0 / 10</span>
+  </div>
+
+  <!-- Arena -->
+  <div class="arena">
+    <!-- Vous -->
+    <div class="prisoner" id="pp">
+      <span class="p-name">Vous</span>
+      <div class="figure">
+        <!-- prisoner silhouette -->
+        <svg viewBox="0 0 72 96" xmlns="http://www.w3.org/2000/svg">
+          <rect x="16" y="44" width="40" height="52" rx="4" fill="#252535"/>
+          <circle cx="36" cy="30" r="15" fill="#353548"/>
+          <circle cx="36" cy="33" r="9" fill="#252535" opacity=".45"/>
+          <rect x="16" y="44" width="7" height="52" fill="#1e1e2e" rx="0"/>
+          <rect x="28" y="44" width="7" height="52" fill="#1e1e2e" rx="0"/>
+          <rect x="41" y="44" width="7" height="52" fill="#1e1e2e" rx="0"/>
+        </svg>
+        <div class="bars-overlay">
+          <div class="bar"></div><div class="bar"></div>
+          <div class="bar"></div><div class="bar"></div>
+        </div>
+      </div>
+      <div class="bubble" id="pb"></div>
+      <div class="p-score">
+        <div class="score-num" id="pscore">0</div>
+        <div class="score-lbl">ans de prison</div>
+      </div>
+    </div>
+
+    <!-- Outcome -->
+    <div class="outcome">
+      <span class="outcome-lbl">Résultat</span>
+      <div class="outcome-body" id="obody"><span style="font-size:26px">⚖️</span></div>
+      <div class="verdict-tag" id="vtag"></div>
+    </div>
+
+    <!-- Adversaire -->
+    <div class="prisoner" id="ap">
+      <span class="p-name" id="aname">Adversaire</span>
+      <div class="figure">
+        <svg viewBox="0 0 72 96" xmlns="http://www.w3.org/2000/svg">
+          <rect x="16" y="44" width="40" height="52" rx="4" fill="#252535"/>
+          <circle cx="36" cy="30" r="15" fill="#353548"/>
+          <circle cx="36" cy="33" r="9" fill="#252535" opacity=".45"/>
+          <rect x="16" y="44" width="7" height="52" fill="#1e1e2e" rx="0"/>
+          <rect x="28" y="44" width="7" height="52" fill="#1e1e2e" rx="0"/>
+          <rect x="41" y="44" width="7" height="52" fill="#1e1e2e" rx="0"/>
+        </svg>
+        <div class="bars-overlay">
+          <div class="bar"></div><div class="bar"></div>
+          <div class="bar"></div><div class="bar"></div>
+        </div>
+      </div>
+      <div class="bubble" id="ab"></div>
+      <div class="p-score">
+        <div class="score-num" id="ascore">0</div>
+        <div class="score-lbl">ans de prison</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Actions -->
+  <div class="actions">
+    <button class="btn btn-c" id="bc" onclick="choose('C')">🤝 Coopérer</button>
+    <button class="btn btn-d" id="bd" onclick="choose('D')">🗡️ Trahir</button>
+    <button class="btn btn-r" id="br" onclick="reset()">↺ Rejouer</button>
+  </div>
+
+  <!-- Gameover -->
+  <div class="gameover" id="go">
+    <div class="go-title">VERDICT FINAL</div>
+    <div class="go-body" id="gob"></div>
+  </div>
+
+  <!-- History -->
+  <div class="history" id="hist">
+    <span class="history-lbl">Historique</span>
+    <span id="hempty" style="font-size:11px;color:var(--muted)">Aucune manche jouée</span>
+  </div>
+
+  <!-- Matrix -->
+  <div class="matrix-wrap">
+    <div class="matrix-title">📊 Matrice des gains — années de prison ajoutées</div>
+    <div class="matrix">
+      <div class="mh"></div>
+      <div class="mh">Adversaire<br><strong>COOPÈRE</strong></div>
+      <div class="mh">Adversaire<br><strong>TRAHIT</strong></div>
+
+      <div class="mh right">Vous<br><strong>COOPÉREZ</strong></div>
+      <div class="mc mc-cc" id="mcc">
+        <div class="mc-score">+1 / +1</div>
+        <div class="mc-desc">Coopération mutuelle<br>Optimum collectif</div>
+      </div>
+      <div class="mc mc-cd" id="mcd">
+        <div class="mc-score">+5 / +0</div>
+        <div class="mc-desc">Vous êtes trahi<br>Pire cas pour vous</div>
+      </div>
+
+      <div class="mh right">Vous<br><strong>TRAHISSEZ</strong></div>
+      <div class="mc mc-dc" id="mdc">
+        <div class="mc-score">+0 / +5</div>
+        <div class="mc-desc">Vous trahissez<br>Tentation maximale</div>
+      </div>
+      <div class="mc mc-dd" id="mdd">
+        <div class="mc-score">+3 / +3</div>
+        <div class="mc-desc">Double trahison<br>Équilibre de Nash</div>
+      </div>
+    </div>
+    <div class="matrix-note">
+      💡 <strong style="color:var(--text)">Le paradoxe :</strong>
+      trahir est la stratégie <em>dominante</em> (individuellement rationnelle),
+      mais la coopération mutuelle (+1/+1) est collectivement supérieure à la double trahison (+3/+3).
+      La rationalité individuelle mène à un sous-optimum collectif.
+    </div>
+  </div>
+
+  <!-- Strategies legend -->
+  <div class="legend">
+    <div class="legend-title">🧠 Les stratégies disponibles</div>
+    <div class="legend-grid">
+      <div class="legend-item"><strong>Donnant-Donnant</strong> — Commence par coopérer, puis copie le dernier coup adverse.</div>
+      <div class="legend-item"><strong>Angélique</strong> — Coopère toujours. Vulnérable mais vertueuse.</div>
+      <div class="legend-item"><strong>Diabolique</strong> — Trahit toujours. Révèle l'équilibre de Nash.</div>
+      <div class="legend-item"><strong>Rancunier</strong> — Coopère jusqu'à la première trahison, puis trahit à vie.</div>
+      <div class="legend-item"><strong>Pavlov</strong> — Répète si le résultat était bon, change sinon. (Win-Stay, Lose-Shift)</div>
+      <div class="legend-item"><strong>Aléatoire</strong> — Choisit au hasard (50/50). Simule l'imprévisibilité.</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* ── Data ── */
+const MAX = 10;
+
+const STRATS = {
+  tft: {
+    label: 'Donnant-Donnant',
+    desc: 'Copie votre dernier coup. Commence par coopérer.',
+    move: (h) => h.length === 0 ? 'C' : h[h.length-1].pm
+  },
+  angelique: {
+    label: 'Angélique',
+    desc: 'Coopère toujours, quoi qu\'il arrive.',
+    move: () => 'C'
+  },
+  diabolique: {
+    label: 'Diabolique',
+    desc: 'Trahit toujours, sans exception.',
+    move: () => 'D'
+  },
+  rancunier: {
+    label: 'Rancunier',
+    desc: 'Coopère jusqu\'à la première trahison, puis trahit pour toujours.',
+    move: (h) => h.some(r => r.pm === 'D') ? 'D' : 'C'
+  },
+  pavlov: {
+    label: 'Pavlov',
+    desc: 'Win-Stay, Lose-Shift : répète si bon résultat, change sinon.',
+    move: (h) => {
+      if (!h.length) return 'C';
+      const last = h[h.length-1];
+      // Win for AI = aiPay <= 1 (0 or 1 year)
+      return last.ap <= 1 ? last.am : (last.am === 'C' ? 'D' : 'C');
+    }
+  },
+  aleatoire: {
+    label: 'Aléatoire',
+    desc: 'Choisit aléatoirement à chaque manche (50/50).',
+    move: () => Math.random() < .5 ? 'C' : 'D'
+  }
+};
+
+const PAY = { CC:[1,1], CD:[5,0], DC:[0,5], DD:[3,3] };
+
+/* ── State ── */
+let hist = [], ptot = 0, atot = 0, strat = 'tft', phase = 'idle';
+
+/* ── Init ── */
+function onStrategyChange() {
+  strat = document.getElementById('sel').value;
+  document.getElementById('sdesc').textContent = STRATS[strat].desc;
+  reset();
+}
+
+function reset() {
+  hist = []; ptot = 0; atot = 0; phase = 'idle';
+
+  $('pscore').textContent = '0';
+  $('ascore').textContent = '0';
+  $('rbadge').textContent = `Manche 0 / ${MAX}`;
+
+  setBubble('pb', '', false, false);
+  setBubble('ab', '', false, false);
+
+  setPanel('pp', '');
+  setPanel('ap', '');
+
+  $('obody').innerHTML = '<span style="font-size:26px">⚖️</span>';
+  setVtag('', '');
+
+  ['mcc','mcd','mdc','mdd'].forEach(id => $(id).classList.remove('hl'));
+
+  const h = $('hist');
+  h.innerHTML = '<span class="history-lbl">Historique</span><span id="hempty" style="font-size:11px;color:var(--muted)">Aucune manche jouée</span>';
+
+  $('bc').style.display = '';
+  $('bd').style.display = '';
+  $('br').style.display = 'none';
+  setButtons(false);
+
+  $('go').className = 'gameover';
+}
+
+/* ── Game logic ── */
+function choose(pm) {
+  if (phase !== 'idle') return;
+  phase = 'waiting';
+  setButtons(true);
+
+  const am = STRATS[strat].move(hist);
+
+  // Show "thinking"
+  setBubble('pb', '…', true, false);
+  setBubble('ab', '…', true, false);
+  $('obody').innerHTML = '<span style="font-size:11px;letter-spacing:2px;color:var(--muted)">DÉLIBÉRATION…</span>';
+
+  setTimeout(() => reveal(pm, am), 750);
+}
+
+function reveal(pm, am) {
+  const key = pm + am;
+  const [pp, ap] = PAY[key];
+  ptot += pp; atot += ap;
+  hist.push({ pm, am, pp, ap });
+
+  // Bubbles
+  setBubble('pb', pm === 'C' ? '🤝' : '🗡️', true, true, pm === 'C' ? 'coop' : 'defect');
+  setBubble('ab', am === 'C' ? '🤝' : '🗡️', true, true, am === 'C' ? 'coop' : 'defect');
+
+  // Panels
+  setPanel('pp', pm === 'C' ? 'cooperated' : 'betrayed');
+  setPanel('ap', am === 'C' ? 'cooperated' : 'betrayed');
+
+  // Highlight matrix
+  ['mcc','mcd','mdc','mdd'].forEach(id => $(id).classList.remove('hl'));
+  $('m' + key.toLowerCase()).classList.add('hl');
+
+  // Outcome
+  const details = {
+    CC: { icon:'🤝', line:'<span style="color:var(--green)">Coopération mutuelle</span>', vtag:'OPTIMUM COLLECTIF', vcls:'vtag-cc' },
+    CD: { icon:'😢', line:'<span style="color:var(--red)">Vous avez été trahi !</span>',   vtag:'VICTIME',          vcls:'vtag-cd' },
+    DC: { icon:'😈', line:'<span style="color:var(--gold)">Vous avez trahi !</span>',       vtag:'TENTATION',        vcls:'vtag-dc' },
+    DD: { icon:'💥', line:'<span style="color:var(--red)">Double trahison</span>',          vtag:'ÉQUILIBRE DE NASH',vcls:'vtag-dd' },
+  }[key];
+
+  $('obody').innerHTML = `
+    <div style="line-height:1.9;font-size:11px">
+      <div style="font-size:22px">${details.icon}</div>
+      ${details.line}<br>
+      <span style="color:var(--muted)">Vous +${pp} · Adv. +${ap}</span>
+    </div>`;
+  setVtag(details.vtag, details.vcls);
+
+  if (key === 'DD') {
+    $('pp').classList.add('shake');
+    $('ap').classList.add('shake');
+    setTimeout(() => { $('pp').classList.remove('shake'); $('ap').classList.remove('shake'); }, 400);
+  }
+
+  // Scores
+  $('pscore').textContent = ptot;
+  $('ascore').textContent = atot;
+  $('rbadge').textContent = `Manche ${hist.length} / ${MAX}`;
+
+  addChip(hist.length, key);
+
+  if (hist.length >= MAX) {
+    setTimeout(gameOver, 1100);
+  } else {
+    setTimeout(() => { phase = 'idle'; setButtons(false); }, 1400);
+  }
+}
+
+function gameOver() {
+  phase = 'over';
+  $('bc').style.display = 'none';
+  $('bd').style.display = 'none';
+  $('br').style.display = '';
+
+  const ccN = hist.filter(r => r.pm==='C' && r.am==='C').length;
+  const ddN = hist.filter(r => r.pm==='D' && r.am==='D').length;
+  const cpct = Math.round(hist.filter(r => r.pm==='C').length / MAX * 100);
+  const win = ptot < atot, tie = ptot === atot;
+
+  const resColor = win ? 'var(--green)' : tie ? 'var(--gold)' : 'var(--red)';
+  const resText  = win ? '🏆 VOUS GAGNEZ' : tie ? '🤝 MATCH NUL' : '🔒 VOUS PERDEZ';
+
+  $('gob').innerHTML = `
+    <strong style="font-size:20px;color:${resColor}">${resText}</strong><br>
+    Votre score : <strong style="color:var(--text)">${ptot} ans</strong> &nbsp;·&nbsp;
+    Adversaire : <strong style="color:var(--text)">${atot} ans</strong><br>
+    Coopérations mutuelles : <strong>${ccN}/10</strong>
+    &nbsp;·&nbsp; Trahisons mutuelles : <strong>${ddN}/10</strong>
+    &nbsp;·&nbsp; Votre taux de coopération : <strong>${cpct}%</strong><br><br>
+    <span style="font-size:11px">${lesson(ccN, ddN, cpct)}</span>`;
+
+  $('go').className = 'gameover show';
+}
+
+function lesson(ccN, ddN, cpct) {
+  if (strat === 'diabolique' && cpct > 60)
+    return '🔍 Face à Diabolique, coopérer vous désavantage systématiquement. La seule réponse rationnelle est de trahir aussi — c\'est l\'équilibre de Nash à l\'œuvre.';
+  if (strat === 'angelique' && cpct < 40)
+    return '🔍 Contre Angélique, trahir maximise votre gain individuel. Mais notez : si tout le monde raisonnait ainsi, personne ne coopérerait jamais.';
+  if (strat === 'tft' && ccN >= 7)
+    return '✨ Excellent ! La réciprocité du Donnant-Donnant a favorisé la coopération stable — Robert Axelrod a montré que c\'est souvent la stratégie la plus robuste.';
+  if (strat === 'tft' && ddN >= 5)
+    return '⚡ Spirale punitive : chaque trahison a déclenché une représaille, engendrant une cascade de trahisons mutuelles. Le coût collectif est élevé.';
+  if (strat === 'rancunier' && ccN >= 7)
+    return '✨ Le Rancunier ne pardonne jamais, mais sa sévérité dissuade la trahison dès le départ. La menace crédible favorise la coopération.';
+  if (ccN >= 7)
+    return '✨ Coopération dominante : vous avez atteint l\'optimum collectif. La confiance, quand elle est réciproque, profite à tous.';
+  if (ddN >= 7)
+    return '💥 Équilibre de Nash généralisé : rationnel pour chacun individuellement, mais collectivement sous-optimal. C\'est le cœur du dilemme.';
+  return '🎲 Résultat mixte. Le dilemme du prisonnier illustre la tension fondamentale entre intérêt individuel et bien collectif — tension au cœur de l\'économie, de la politique et de la biologie évolutive.';
+}
+
+/* ── Helpers ── */
+function $(id) { return document.getElementById(id); }
+
+function setBubble(id, txt, show, anim, type) {
+  const el = $(id);
+  el.textContent = txt;
+  el.className = 'bubble' + (show ? ' show' : '') + (anim ? ' pop' : '') + (type ? ' ' + type : '');
+}
+
+function setPanel(id, cls) {
+  $(id).className = 'prisoner' + (cls ? ' ' + cls : '');
+}
+
+function setVtag(txt, cls) {
+  const el = $('vtag');
+  el.textContent = txt;
+  el.className = 'verdict-tag' + (txt ? ' show ' + cls : '');
+}
+
+function setButtons(disabled) {
+  $('bc').disabled = disabled;
+  $('bd').disabled = disabled;
+}
+
+function addChip(n, key) {
+  const empty = $('hempty');
+  if (empty) empty.remove();
+  const tips = {
+    CC: '🤝 Coopération mutuelle (+1 / +1)',
+    CD: '😢 Vous trahi (+5 / +0)',
+    DC: '😈 Vous trahissez (+0 / +5)',
+    DD: '💥 Double trahison (+3 / +3)',
+  };
+  const c = document.createElement('div');
+  c.className = `chip chip-${key}`;
+  c.textContent = n;
+  c.dataset.tip = tips[key];
+  $('hist').appendChild(c);
+}
+
+/* ── Boot ── */
+onStrategyChange();
+</script>
+</body>
+</html>
