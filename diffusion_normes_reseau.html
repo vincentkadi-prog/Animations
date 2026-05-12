@@ -1,0 +1,167 @@
+<h2 class="sr-only">Simulation interactive de diffusion d'une norme dans un réseau organisationnel</h2>
+<style>
+canvas{display:block;width:100%;cursor:pointer}
+.ctrl{display:flex;align-items:center;gap:10px;margin:0 0 10px}
+.ctrl label{font-size:13px;color:var(--color-text-secondary);min-width:110px}
+.stat{font-size:13px;color:var(--color-text-secondary)}
+.stat span{font-weight:500;color:var(--color-text-primary)}
+.btns{display:flex;gap:8px;margin:12px 0 4px}
+button{font-size:13px;padding:5px 14px;border-radius:var(--border-radius-md);border:0.5px solid var(--color-border-secondary);background:transparent;color:var(--color-text-primary);cursor:pointer}
+button:hover{background:var(--color-background-secondary)}
+button.primary{background:var(--color-background-secondary);font-weight:500}
+.legend{display:flex;gap:16px;margin:8px 0 0}
+.leg-item{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--color-text-secondary)}
+.leg-dot{width:10px;height:10px;border-radius:50%}
+.hint{font-size:12px;color:var(--color-text-tertiary);margin:4px 0 0}
+</style>
+
+<canvas id="c" height="320"></canvas>
+
+<div class="legend">
+  <div class="leg-item"><div class="leg-dot" style="background:#888780"></div>Non-adopté</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#F0997B"></div>En transition</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#1D9E75"></div>Adopté</div>
+</div>
+
+<div class="btns">
+  <button class="primary" id="btnPlay" onclick="togglePlay()">▶ Démarrer</button>
+  <button onclick="reset()">Réinitialiser</button>
+</div>
+
+<div class="ctrl" style="margin-top:12px">
+  <label>Seuil d'adoption</label>
+  <input type="range" id="thresh" min="1" max="4" step="1" value="2" style="flex:1">
+  <span id="threshVal" style="font-size:13px;font-weight:500;min-width:60px"></span>
+</div>
+<p class="hint" id="threshHint"></p>
+
+<div style="display:flex;gap:20px;margin:8px 0 0">
+  <div class="stat">Adoptants : <span id="countAdopted">0</span></div>
+  <div class="stat">Taux : <span id="countPct">0%</span></div>
+  <div class="stat">Étape : <span id="countStep">0</span></div>
+</div>
+
+<p class="hint" style="margin-top:8px">Cliquez sur un nœud pour l'activer comme premier adoptant, puis démarrez la simulation.</p>
+
+<script>
+const canvas=document.getElementById('c');
+const ctx=canvas.getContext('2d');
+const W=canvas.offsetWidth;const H=320;
+canvas.width=W;canvas.height=H;
+
+const N=28;
+let nodes=[],edges=[],running=false,step=0,timer=null;
+
+const COLORS={neutral:'#888780',transition:'#F0997B',adopted:'#1D9E75',edge:'rgba(136,135,128,0.25)',edgeActive:'rgba(29,158,117,0.5)'};
+
+function init(){
+  nodes=[];edges=[];step=0;running=false;clearInterval(timer);
+  document.getElementById('btnPlay').textContent='▶ Démarrer';
+
+  const cx=W/2,cy=H/2;
+  const rings=[{r:0,n:1},{r:80,n:7},{r:155,n:12},{r:220,n:8}];
+  let id=0;
+  for(const ring of rings){
+    for(let i=0;i<ring.n;i++){
+      const angle=(2*Math.PI*i/ring.n)-Math.PI/2;
+      nodes.push({
+        id:id++,
+        x:cx+(ring.r===0?0:ring.r*Math.cos(angle)),
+        y:cy+(ring.r===0?0:ring.r*Math.sin(angle)),
+        state:'neutral',next:'neutral',r:8
+      });
+    }
+  }
+
+  for(let i=0;i<N;i++){
+    for(let j=i+1;j<N;j++){
+      const dx=nodes[i].x-nodes[j].x,dy=nodes[i].y-nodes[j].y;
+      const d=Math.sqrt(dx*dx+dy*dy);
+      if(d<95) edges.push([i,j]);
+    }
+  }
+  draw();updateStats();
+}
+
+function getNeighbors(id){
+  return edges.filter(e=>e[0]===id||e[1]===id).map(e=>e[0]===id?e[1]:e[0]);
+}
+
+function getThresh(){return parseInt(document.getElementById('thresh').value);}
+
+function simulateStep(){
+  step++;
+  nodes.forEach(n=>{n.next=n.state;});
+  nodes.forEach(n=>{
+    if(n.state!=='neutral') return;
+    const nb=getNeighbors(n.id);
+    const adoptedNb=nb.filter(id=>nodes[id].state==='adopted').length;
+    if(adoptedNb>=getThresh()) n.next='transition';
+  });
+  nodes.forEach(n=>{
+    if(n.state==='transition') n.next='adopted';
+  });
+  nodes.forEach(n=>{n.state=n.next;});
+  draw();updateStats();
+  const allDone=nodes.every(n=>n.state==='adopted'||n.state==='neutral');
+  const anyNew=nodes.some(n=>n.state==='transition'||n.state==='adopted');
+  if(nodes.filter(n=>n.state==='transition').length===0 && step>1){
+    const remaining=nodes.filter(n=>n.state==='neutral');
+    if(remaining.length===N||nodes.every(n=>n.state!=='transition')){
+      clearInterval(timer);running=false;
+      document.getElementById('btnPlay').textContent='▶ Démarrer';
+    }
+  }
+}
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  edges.forEach(([a,b])=>{
+    const active=nodes[a].state==='adopted'&&nodes[b].state==='adopted';
+    ctx.beginPath();ctx.moveTo(nodes[a].x,nodes[a].y);ctx.lineTo(nodes[b].x,nodes[b].y);
+    ctx.strokeStyle=active?COLORS.edgeActive:COLORS.edge;ctx.lineWidth=active?1.5:1;ctx.stroke();
+  });
+  nodes.forEach(n=>{
+    ctx.beginPath();ctx.arc(n.x,n.y,n.r,0,Math.PI*2);
+    ctx.fillStyle=COLORS[n.state];ctx.fill();
+    if(n.state==='adopted'){ctx.strokeStyle='rgba(15,110,86,0.5)';ctx.lineWidth=2;ctx.stroke();}
+  });
+}
+
+function updateStats(){
+  const a=nodes.filter(n=>n.state==='adopted').length;
+  document.getElementById('countAdopted').textContent=a;
+  document.getElementById('countPct').textContent=Math.round(a/N*100)+'%';
+  document.getElementById('countStep').textContent=step;
+}
+
+function togglePlay(){
+  if(running){clearInterval(timer);running=false;document.getElementById('btnPlay').textContent='▶ Démarrer';}
+  else{running=true;document.getElementById('btnPlay').textContent='⏸ Pause';timer=setInterval(simulateStep,700);}
+}
+
+function reset(){clearInterval(timer);running=false;init();}
+
+canvas.addEventListener('click',e=>{
+  const rect=canvas.getBoundingClientRect();
+  const sx=canvas.width/rect.width;
+  const x=(e.clientX-rect.left)*sx,y=(e.clientY-rect.top)*(canvas.height/rect.height);
+  nodes.forEach(n=>{
+    const d=Math.hypot(n.x-x,n.y-y);
+    if(d<14){n.state=n.state==='adopted'?'neutral':'adopted';}
+  });
+  draw();updateStats();
+});
+
+const threshEl=document.getElementById('thresh');
+const hints=['(contagion simple : 1 voisin suffit)','(seuil modéré : 2 voisins)','(contagion complexe : 3 voisins)','(seuil élevé : 4 voisins)'];
+function updateThreshLabel(){
+  const v=threshEl.value;
+  document.getElementById('threshVal').textContent=v+' voisin'+(v>1?'s':'');
+  document.getElementById('threshHint').textContent=hints[v-1];
+}
+threshEl.addEventListener('input',updateThreshLabel);
+updateThreshLabel();
+
+init();
+</script>
